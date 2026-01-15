@@ -1,0 +1,15 @@
+[project]
+name = "osrs-ge-seer"
+version = "0.1.0"
+description = "OSRS Grand Exchange trading models"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "Paul Chichura", email = "pchichura@gmail.com"}]
+keywords = ["osrs", "grand-exchange"]
+
+[project.urls]
+Repository = "https://github.com/pchichura/osrs-ge-seer"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
