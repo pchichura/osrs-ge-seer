@@ -18,7 +18,7 @@ def get_item_map(force_refresh=False):
     Returns:
     --------
     item_map : dict
-        A dictionary mapping item IDs (int) to item names (str).
+        A dictionary mapping item IDs (str of integer) to item names (str).
     """
     # load user configuration for user-agent for API requests
     config = load_config()
@@ -35,7 +35,7 @@ def get_item_map(force_refresh=False):
         response.raise_for_status()  # raise an error for bad responses
 
         # save the mapping
-        item_map = {int(item["id"]): item["name"] for item in response.json()}
+        item_map = {item["id"]: item["name"] for item in response.json()}
         with open(item_map_path, "w") as f:
             json.dump(item_map, f, indent=4)
 
