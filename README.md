@@ -19,15 +19,13 @@ The wizard will:
 
 ## Querying Price Data
 
-Grand Exchange priced ata used throughout the package is queried from the OSRS Wiki using their [API](https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices).
+Grand Exchange price data is queried from the OSRS Wiki using their [API](https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices). Different methods are provided for calling the API to query data and either return the data or save it to disk. Data is automatically saved as parquet files and read from the user-specified directory during setup.
 
 The data at each time instance consists of high and low prices for each item averaged over a specified time step, as well as the volume traded during that period. Specifically, the price data for each item and each time consists of:
 - `"avgHighPrice"`: the volume-weighted average of instant-buy transactions
 - `"highPriceVolume"`: the volume of instant-buy transactions
 - `"avgLowPrice"`: the volume-weighted average of instant-sell transactions
 - `"lowPriceVolume"`: the volume of instant-sell transactions
-
-Different methods are provided for calling the API to query data and either return the data or save it to disk. Data is automatically saved as parquet files and read from the user-specified directory during setup.
 
 ### Query a single time instance
 
@@ -54,10 +52,10 @@ Query price data for all items over a range in time, automatically saving the da
 ```python
 from ge_seer.data.query import query_prices_range
 
-# Defaults: stop=now, start=30 steps before stop
-query_prices_range(timestep="24h")
+# defaults: stop is now, start is 30 steps before stop, step size 24h
+query_prices_range()
 
-# Custom range (strings or ints both supported)
+# custom range (strings or ints both supported)
 query_prices_range(
 		time_start="2025-10-01 00:00:00 UTC",
 		time_stop="2025-10-02 00:00:00 UTC",
