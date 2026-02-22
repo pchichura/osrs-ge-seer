@@ -1,11 +1,17 @@
 from .paths import (
-    PROJECT_ROOT,
-    DATA_DIR,
-    RAW_DATA_DIR,
+    DEFAULT_BASE_DIR,
+    DEFAULT_CONFIG_FILE,
+    get_config_path,
+)
+from .manager import (
+    save_config,
+    load_config,
 )
 
 __all__ = [
-    "PROJECT_ROOT",
-    "DATA_DIR",
-    "RAW_DATA_DIR",
+    "DEFAULT_BASE_DIR",
+    "DEFAULT_CONFIG_FILE",
+    "get_config_path",
+    "save_config",
+    "load_config",
 ]
