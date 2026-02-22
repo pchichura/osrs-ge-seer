@@ -1,26 +1,29 @@
 import requests, json, time
 from pathlib import Path
 from functools import wraps
+from glob import glob
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from tqdm import tqdm
 from ..config.manager import load_config
-from .time_utils import datetime_to_timestamp
+from .time_utils import datetime_to_timestamp, get_current_timestamp
 
 
 def rate_limit(min_interval=1.0):
     """
     Decorator that enforces a minimum time interval between function calls.
-    
+
     Arguments:
     ----------
     min_interval : float [1.0]
         Minimum time in seconds between successive calls to the decorated function. If a
         call is made too soon, the decorator sleeps to enforce the interval.
     """
+
     def decorator(func):
         func._last_call_time = 0
-        
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             elapsed = time.time() - func._last_call_time
@@ -30,8 +33,9 @@ def rate_limit(min_interval=1.0):
 
             func._last_call_time = time.time()
             return func(*args, **kwargs)
-        
+
         return wrapper
+
     return decorator
 
 
@@ -78,12 +82,12 @@ def get_item_map(force_refresh=False):
 
 
 @rate_limit(min_interval=1.0)
-def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=True):
+def query_prices_instance(query_time, timestep="24h", store=True):
     """
     Fetch price data from the OSRS Wiki GE API for all items at some instant in time.
     Data consists of the high and low prices each item averaged over the specified
     timestep, as well as the volume traded during that period.
-    
+
     NOTE: This function is rate-limited to max 1 call per second (enforced by decorator)
     according to OSRS Wiki guidelines. If called more frequently, it will automatically
     sleep to enforce the constraint.
@@ -92,13 +96,10 @@ def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=T
 
     Arguments:
     ----------
-    time_unix : int []
-        The Unix timestamp (in UTC) for which to query price data. Must provide either
-        time_unix or time_str, but not both. Time must be an integer multiple of the
-        timestep.
-    time_str : str []
-        The human-readable datetime string (in UTC) for which to query price data, in
-        the format "YYYY-MM-DD HH:MM:SS UTC". May provide instead of time_unix.
+    query_time : int or str
+        The Unix timestamp (in UTC) for which to query price data, or a human-readable
+        datetime string in the format "YYYY-MM-DD HH:MM:SS UTC" to be converted to a
+        Unix timestamp. The timestamp must be an integer multiple of the timestep.
     timestep : str ["24h"]
         The time interval for price averaging. Options: "5m", "1h", "6h", "24h"
     store : bool [True]
@@ -121,25 +122,21 @@ def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=T
     headers = {"User-Agent": config["user_agent"]}
     data_dir = Path(config["data_dir"])
 
-    # determine the timestamp to query based on the provided arguments
-    if time_unix is None and time_str is None:
-        raise ValueError("Must provide either time_unix or time_str.")
-    if time_unix is not None and time_str is not None:
-        raise ValueError("Provide either time_unix or time_str, but not both.")
-    if time_unix is None:
-        time_unix = datetime_to_timestamp(time_str)
-    time_unix = int(time_unix)  # ensure it's an integer
+    # convert query_time to unix timestamp if it's a string
+    if isinstance(query_time, str):
+        query_time = datetime_to_timestamp(query_time)
+    query_time = int(query_time)  # ensure it's an integer
 
     # check that the timestamp is an integer multiple of the timestep
     timestep_seconds = {"5m": 300, "1h": 3600, "6h": 21600, "24h": 86400}
-    if time_unix % timestep_seconds[timestep] != 0:
+    if query_time % timestep_seconds[timestep] != 0:
         raise ValueError(
             f"Time must be an integer multiple of the timestep ({timestep})."
         )
 
     # query the price data for the specified time and timestep
     response = requests.get(
-        f"https://prices.runescape.wiki/api/v1/osrs/{timestep}?timestamp={time_unix}",
+        f"https://prices.runescape.wiki/api/v1/osrs/{timestep}?timestamp={query_time}",
         headers=headers,
     )
     response.raise_for_status()  # raise an error for bad responses
@@ -148,7 +145,7 @@ def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=T
     df = pd.DataFrame(response.json()["data"]).T
     df["itemID"] = df.index
     df["timestep"] = timestep
-    df["time"] = time_unix
+    df["time"] = query_time
     df = df.convert_dtypes()
 
     # store the data if requested
@@ -159,7 +156,7 @@ def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=T
             / "prices_raw"
             / "instance"
             / f"timestep={timestep}"
-            / f"time={time_unix}"
+            / f"time={query_time}"
         )
         partition_dir.mkdir(parents=True, exist_ok=True)
 
@@ -172,3 +169,77 @@ def query_prices_instance(time_unix=None, time_str=None, timestep="24h", store=T
     return df[
         ["itemID", "avgHighPrice", "highPriceVolume", "avgLowPrice", "lowPriceVolume"]
     ]
+
+
+def query_prices_range(time_start=None, time_stop=None, timestep="24h"):
+    """
+    Wrapper for query_prices_instance to batch query and store price data for all valid
+    time instances within a range, inclusively. Data is automatically stored to disk in
+    the directory specified during setup. Query is rate-limited to max 1 per second.
+
+    Arguments:
+    ----------
+    time_start : int or str [None]
+        The Unix timestamp (in UTC) for the time range start, inclusively. If a str, it
+        should be formatted "YYYY-MM-DD HH:MM:SS UTC". Default: 30 steps before stop.
+    time_stop : int or str [None]
+        The Unix timestamp (in UTC) for the time range stop, inclusively. If a str, it
+        should be formatted "YYYY-MM-DD HH:MM:SS UTC". Default: now.
+    timestep : str ["24h"]
+        The time interval for price averaging. Options: "5m", "1h", "6h", "24h"
+    """
+    # define timestep in seconds
+    step_size = {"5m": 300, "1h": 3600, "6h": 21600, "24h": 86400}[timestep]
+
+    # format start/stop times; defaults: stop = now, start = 30 timesteps before stop
+    if time_stop is None:
+        time_stop = get_current_timestamp()
+    elif isinstance(time_stop, str):
+        time_stop = datetime_to_timestamp(time_stop)
+    time_stop = int(time_stop)
+    if time_start is None:
+        time_start = time_stop - (30 * step_size)  # 30 steps before stop
+    elif isinstance(time_start, str):
+        time_start = datetime_to_timestamp(time_start)
+    time_start = int(time_start)
+    if time_start > time_stop:
+        raise ValueError(f"start ({time_start}) must be before stop ({time_stop}).")
+
+    # find the nearest valid start and stop times within the range, inclusively
+    if time_start % step_size != 0:
+        time_start = time_start + (step_size - (time_start % step_size))
+    if time_stop % step_size != 0:
+        time_stop = time_stop - (time_stop % step_size)
+
+    # validate that there is at least one valid timestamp in the range
+    if time_start > time_stop:
+        raise ValueError(
+            f"No valid timestamps in the range after adjusting for timestep. "
+            f"Nearest valid start: {time_start}, nearest valid stop: {time_stop}."
+        )
+
+    # load user configuration for data directory path
+    config = load_config()
+    data_dir = Path(config["data_dir"])
+
+    # get all valid timestamps not yet queried and saved in the range
+    all_timestamps = set(range(time_start, time_stop + 1, step_size))
+    queried_files = glob(
+        str(
+            data_dir
+            / "prices_raw"
+            / "instance"
+            / f"timestep={timestep}"
+            / "time=*/data.parquet"
+        )
+    )
+    queried_timestamps = set(
+        [int(Path(file).parent.name.split("=")[1]) for file in queried_files]
+    )
+    timestamps_to_query = all_timestamps - queried_timestamps
+
+    # Query and store data for each timestamp that needs to be queried
+    for query_time in tqdm(
+        timestamps_to_query, desc=f"Querying {timestep} prices", unit=" queries"
+    ):
+        query_prices_instance(query_time=query_time, timestep=timestep, store=True)
