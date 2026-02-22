@@ -43,5 +43,5 @@ def setup():
 
     # save the configuration
     print()
-    save_config(contact_info, contact_type, data_dir, verbose=True)
+    save_config(contact_info, contact_type, resolved_data_path, verbose=True)
     print("\nSetup complete!")

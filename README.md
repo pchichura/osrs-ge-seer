@@ -3,7 +3,7 @@ and training models to predict valuable products to buy and sell.
 
 ## Setup
 
-In order to scrape the OSRS Wiki for data used throughout the package, a one-time configuration is required to comply with the [OSRS Wiki API Policy](https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices), which requires a custom `User-Agent` for contact purposes.
+In order to scrape the OSRS Wiki for data used throughout the package, a one-time configuration is required to comply with the [OSRS Wiki API Policy](https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices), which requires a custom User-Agent for contact purposes.
 
 After installation, run the setup wizard in Python:
 
