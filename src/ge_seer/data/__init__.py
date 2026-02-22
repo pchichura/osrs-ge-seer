@@ -1,7 +1,9 @@
 from .query import (
-    query_prices,
+    get_item_map,
+    query_prices_instance,
 )
 
 __all__ = [
-    "query_prices",
+    "get_item_map",
+    "query_prices_instance",
 ]
