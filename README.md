@@ -78,10 +78,10 @@ Load previously queried price data from disk. Currently, only supports reading d
 ```python
 from ge_seer.data import read_prices_data
 
-# Read all saved data for a single item
+# read all saved data for a single item
 df = read_prices_data(item_id=2, timestep="24h")
 
-# Read with optional time bounds
+# read with optional time bounds
 df = read_prices_data(
     item_id=2,
     timestep="1h",
