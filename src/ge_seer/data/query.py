@@ -82,6 +82,63 @@ def get_item_map(force_refresh=False):
     return item_map
 
 
+def get_static_values(force_refresh=False):
+    """
+    Retrieves static in-game item values from the OSRS Wiki API. These values include
+    low/high alchemy values as well as the static value of the item defined by Jagex,
+    which is used to calculate other in-game values. For more info, see:
+    https://oldschool.runescape.wiki/w/Value
+
+    The first time this function is called, it will fetch the data using the API and
+    create a local file to store the values. Subsequent calls will load from this file.
+
+    Arguments:
+    ----------
+    force_refresh : bool [False]
+        If True, forces a refresh of the static values from the API, even if a local
+        file already exists.
+
+    Returns:
+    --------
+    static_values : dict
+        A nested dictionary mapping item IDs (str of integer) to a dict containing:
+            "lowalch" : int, low alchemy value
+            "highalch" : int, high alchemy value
+            "value" : int, Jagex-defined value
+        Example: {"4151":{"lowalch": 48000, "highalch": 72000, "value": 120001}}
+    """
+    # load user configuration for user-agent for API requests
+    config = load_config()
+    data_dir = config["data_dir"]
+    headers = {"User-Agent": config["user_agent"]}
+
+    # fetch the static values if the file doesn't exist or if force_refresh is True
+    static_values_path = Path(data_dir) / "static_values.json"
+    if force_refresh or not static_values_path.exists():
+        response = requests.get(
+            "https://prices.runescape.wiki/api/v1/osrs/mapping",
+            headers=headers,
+        )
+        response.raise_for_status()  # raise an error for bad responses
+
+        # save the static values
+        static_values = {
+            item["id"]: {
+                "lowalch": item.get("lowalch"),
+                "highalch": item.get("highalch"),
+                "value": item.get("value"),
+            }
+            for item in response.json()
+        }
+        with open(static_values_path, "w") as f:
+            json.dump(static_values, f, indent=4)
+
+    # return the static values from the file
+    with open(static_values_path, "r") as f:
+        static_values = json.load(f)
+    return static_values
+
+
 @rate_limit(min_interval=1.0)
 def query_prices_instance(query_time, timestep="24h", store=True):
     """
