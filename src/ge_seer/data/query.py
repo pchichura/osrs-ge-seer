@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from tqdm import tqdm
 from ..config.manager import load_config
-from .time_utils import datetime_to_timestamp, get_current_timestamp
+from .time_utils import standardize_time_input, get_current_timestamp
 
 
 def rate_limit(min_interval=1.0):
@@ -122,10 +122,8 @@ def query_prices_instance(query_time, timestep="24h", store=True):
     headers = {"User-Agent": config["user_agent"]}
     data_dir = Path(config["data_dir"])
 
-    # convert query_time to unix timestamp if it's a string
-    if isinstance(query_time, str):
-        query_time = datetime_to_timestamp(query_time)
-    query_time = int(query_time)  # ensure it's an integer
+    # standardize the query_time input to a Unix timestamp
+    query_time = standardize_time_input(query_time)
 
     # check that the timestamp is an integer multiple of the timestep
     timestep_seconds = {"5m": 300, "1h": 3600, "6h": 21600, "24h": 86400}
@@ -192,16 +190,10 @@ def query_prices_range(time_start=None, time_stop=None, timestep="24h"):
     step_size = {"5m": 300, "1h": 3600, "6h": 21600, "24h": 86400}[timestep]
 
     # format start/stop times; defaults: stop = now, start = 30 timesteps before stop
-    if time_stop is None:
-        time_stop = get_current_timestamp()
-    elif isinstance(time_stop, str):
-        time_stop = datetime_to_timestamp(time_stop)
-    time_stop = int(time_stop)
-    if time_start is None:
-        time_start = time_stop - (30 * step_size)  # 30 steps before stop
-    elif isinstance(time_start, str):
-        time_start = datetime_to_timestamp(time_start)
-    time_start = int(time_start)
+    time_stop = get_current_timestamp() if time_stop is None else time_stop
+    time_stop = standardize_time_input(time_stop)
+    time_start = time_stop - (30 * step_size) if time_start is None else time_start
+    time_start = standardize_time_input(time_start)
     if time_start > time_stop:
         raise ValueError(f"start ({time_start}) must be before stop ({time_stop}).")
 

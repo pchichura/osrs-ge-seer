@@ -41,3 +41,26 @@ def datetime_to_timestamp(time):
     """
     dt = datetime.strptime(time, "%Y-%m-%d %H:%M:%S UTC")
     return int(dt.replace(tzinfo=timezone.utc).timestamp())
+
+
+def standardize_time_input(time):
+    """
+    Standardizes time input to a Unix timestamp. Accepts either an integer timestamp
+    or a human-readable datetime string in the format "YYYY-MM-DD HH:MM:SS UTC".
+
+    Arguments:
+    ----------
+    time : int, str, or None
+        The time input to standardize.
+
+    Returns:
+    --------
+    int or None
+        The standardized Unix timestamp, or None if the input is None.
+    """
+    if time is None:
+        return None
+    elif isinstance(time, str):
+        return datetime_to_timestamp(time)
+    else:
+        return int(time)
