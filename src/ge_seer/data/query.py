@@ -8,6 +8,7 @@ import pyarrow.parquet as pq
 from tqdm import tqdm
 from ..config.manager import load_config
 from .time_utils import standardize_time_input, get_current_timestamp
+from .file_io import _empty_prices_df
 
 
 def rate_limit(min_interval=1.0):
@@ -139,8 +140,12 @@ def query_prices_instance(query_time, timestep="24h", store=True):
     )
     response.raise_for_status()  # raise an error for bad responses
 
-    # convert the response to a DataFrame
+    # convert the response to a DataFrame, catch empty data
     df = pd.DataFrame(response.json()["data"]).T
+    if len(df) == 0:
+        df = _empty_prices_df()
+
+    # add relevant columns to the DataFrame
     df["itemID"] = df.index
     df["timestep"] = timestep
     df["time"] = query_time
