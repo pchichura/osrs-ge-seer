@@ -63,12 +63,31 @@ query_prices_range(
 )
 ```
 
-### CLI usage
-
-Command-line wrapper for batch querying. Example:
+Or you can execute a script at the command line. Example:
 
 ```bash
 python scripts/query_prices.py
 python scripts/query_prices.py --start "2025-11-01 00:00:00 UTC" --stop "2025-11-08 00:00:00 UTC" --timestep 1h
 python scripts/query_prices.py --start 1761004800 --stop 1761609600 --timestep 24h
 ```
+
+## Reading Saved Price Data
+
+Load previously queried price data from disk. Currently, only supports reading data for a single item. Example:
+
+```python
+from ge_seer.data import read_prices_data
+
+# Read all saved data for a single item
+df = read_prices_data(item_id=2, timestep="24h")
+
+# Read with optional time bounds
+df = read_prices_data(
+    item_id=2,
+    timestep="1h",
+    time_start="2025-10-01 00:00:00 UTC",
+    time_stop="2025-11-01 00:00:00 UTC",
+)
+```
+
+Returns a `pandas.DataFrame` with columns: `time`, `avgHighPrice`, `highPriceVolume`, `avgLowPrice`, `lowPriceVolume`.
