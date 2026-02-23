@@ -51,6 +51,11 @@ def parse_args():
         help="End time as 'YYYY-MM-DD HH:MM:SS UTC' or timestamp (optional).",
     )
     parser.add_argument(
+        "--alchemy",
+        action="store_true",
+        help="Overlay low and high alchemy values on the plot.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -67,28 +72,20 @@ def main():
     time_stop = " ".join(args.time_stop) if args.time_stop else None
 
     # generate plot
-    try:
-        fig, axs = plot_trade_history(
-            item_id=args.itemid,
-            timestep=args.timestep,
-            time_start=time_start,
-            time_stop=time_stop,
-            filename=args.output,
-        )
+    fig, axs = plot_trade_history(
+        item_id=args.itemid,
+        timestep=args.timestep,
+        time_start=time_start,
+        time_stop=time_stop,
+        filename=args.output,
+        plot_alchemy=args.alchemy,
+    )
 
-        # display or save the plot
-        if args.output:
-            print(f"Plot saved to {args.output}")
-        else:
-            plt.show()
-
-    # handle expected errors gracefully
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+    # display or save the plot
+    if args.output:
+        print(f"Plot saved to {args.output}")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":

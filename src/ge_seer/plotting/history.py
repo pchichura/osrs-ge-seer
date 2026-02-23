@@ -1,8 +1,44 @@
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
-from ..data import read_prices_data, get_item_map
+from ..data import read_prices_data, get_item_map, get_static_values
+
+
+def format_number(n: int) -> str:
+    """
+    Helper function to convert a large integer into a more human-readable string with
+    suffixes, in the style of RuneScape item values. For example:
+        1500 -> "1.5k", 2000000 -> "2M", 3500000000 -> "3.5B"
+
+    Arguments:
+    ----------
+    n : int
+        The number to convert.
+
+    Returns:
+    --------
+    str
+        The formatted string representation of the number.
+
+    """
+    abs_n = abs(n)
+    sign = "-" if n < 0 else ""
+
+    def fmt(value, suffix):
+        # Remove trailing .0 if it’s an integer after division
+        s = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{sign}{s}{suffix}"
+
+    if abs_n >= 1_000_000_000 and abs_n % 100_000_000 == 0:
+        return fmt(abs_n / 1_000_000_000, "B")
+    elif abs_n >= 1_000_000 and abs_n % 100_000 == 0:
+        return fmt(abs_n / 1_000_000, "M")
+    elif abs_n >= 1_000 and abs_n % 100 == 0:
+        return fmt(abs_n / 1_000, "k")
+    else:
+        return str(n)
 
 
 def plot_trade_history(
@@ -12,6 +48,7 @@ def plot_trade_history(
     time_start=None,
     time_stop=None,
     filename=None,
+    plot_alchemy=False,
 ):
     """
     Plot OSRS GE trade history for a single item showing prices, volumes, and values.
@@ -31,6 +68,8 @@ def plot_trade_history(
         Optional end time for data range (inclusive) when reading data from disk.
     filename : str [None]
         If provided, saves the figure to this path (e.g., "price_history.png").
+    plot_alchemy : bool [False]
+        Whether to plot and annotate low and high alchemy values.
 
     Returns:
     --------
@@ -81,12 +120,17 @@ def plot_trade_history(
     buy_color = "mediumorchid"
     sell_color = "forestgreen"
     all_color = "black"
+    alch_color = "goldenrod"
 
     # calculate some derived quantities
     total_volume = df["highPriceVolume"] + df["lowPriceVolume"]
-    low_value = df["lowPriceVolume"] * df["avgLowPrice"]
-    high_value = df["highPriceVolume"] * df["avgHighPrice"]
-    total_value = low_value + high_value
+    low_value = df["lowPriceVolume"] * df["avgLowPrice"].to_numpy(
+        na_value=np.nan, dtype=float
+    )
+    high_value = df["highPriceVolume"] * df["avgHighPrice"].to_numpy(
+        na_value=np.nan, dtype=float
+    )
+    total_value = np.nansum([high_value, low_value], axis=0)
     all_average_price = (total_value / total_volume).round()
 
     # plot price spreads
@@ -131,17 +175,153 @@ def plot_trade_history(
 
     # vertical lines from low to high price
     if not big_range:
-        ax.plot(
-            [dates, dates],
-            df[["avgLowPrice", "avgHighPrice"]].T,
-            color="grey",
-            zorder=8,
-            linewidth=1,
-        )
+        # filter out rows where either price is NaN
+        valid_mask = df["avgLowPrice"].notna() & df["avgHighPrice"].notna()
+        valid_dates = [dates[i] for i in range(len(dates)) if valid_mask.iloc[i]]
+        valid_prices = df.loc[valid_mask, ["avgLowPrice", "avgHighPrice"]]
+        if len(valid_dates) > 0:
+            ax.plot(
+                [valid_dates, valid_dates],
+                valid_prices.T,
+                color="grey",
+                zorder=8,
+                linewidth=1,
+            )
 
     # use log scale for better visualizing large price swings
     if df["avgHighPrice"].max() / df["avgLowPrice"].min() >= 10:
         ax.set_yscale("log")
+
+    # get alchemy values for plotting
+    if plot_alchemy:
+        static_values = get_static_values()
+        item_values = static_values.get(str(item_id), {})
+        lowalch = item_values.get("lowalch")
+        highalch = item_values.get("highalch")
+
+        # plot low alch values
+        ymin, ymax = ax.get_ylim()
+        if lowalch is not None:
+            if lowalch > ymax:
+                ax.scatter(dates[0], ymax, marker="^", color=alch_color)
+                ax.annotate(
+                    f"LA:\n{format_number(lowalch)}",
+                    xy=(dates[0], ymax),
+                    xytext=(-4, -4),
+                    textcoords="offset points",
+                    horizontalalignment="right",
+                    verticalalignment="center",
+                    fontsize=7,
+                    color=alch_color,
+                )
+            elif lowalch < ymin:
+                ax.scatter(dates[0], ymin, marker="v", color=alch_color)
+                ax.annotate(
+                    f"LA:\n{format_number(lowalch)}",
+                    xy=(dates[0], ymin),
+                    xytext=(-4, 4),
+                    textcoords="offset points",
+                    horizontalalignment="right",
+                    verticalalignment="center",
+                    fontsize=7,
+                    color=alch_color,
+                )
+            else:
+                ax.axhline(
+                    item_values.get("lowalch"),
+                    color=alch_color,
+                    linestyle="dashed",
+                    linewidth=0.5,
+                )
+                ax.annotate(
+                    f"LA:\n{format_number(lowalch)}",
+                    xy=(dates[0], item_values.get("lowalch")),
+                    xytext=(-4, -4),
+                    textcoords="offset points",
+                    horizontalalignment="right",
+                    verticalalignment="top",
+                    fontsize=7,
+                    color=alch_color,
+                )
+
+        # plot high alch values
+        if highalch is not None:
+            if highalch > ymax:
+                ax.scatter(dates[-1], ymax, marker="^", color=alch_color)
+                ax.annotate(
+                    f"HA:\n{format_number(highalch)}",
+                    xy=(dates[-1], ymax),
+                    xytext=(4, -4),
+                    textcoords="offset points",
+                    horizontalalignment="left",
+                    verticalalignment="center",
+                    fontsize=7,
+                    color=alch_color,
+                )
+            elif highalch < ymin:
+                ax.scatter(dates[-1], ymin, marker="v", color=alch_color)
+                ax.annotate(
+                    f"HA:\n{format_number(highalch)}",
+                    xy=(dates[-1], ymin),
+                    xytext=(4, 4),
+                    textcoords="offset points",
+                    horizontalalignment="left",
+                    verticalalignment="center",
+                    fontsize=7,
+                    color=alch_color,
+                )
+            else:
+                ax.axhline(
+                    item_values.get("highalch"),
+                    color=alch_color,
+                    linestyle="dashed",
+                    linewidth=0.5,
+                )
+                ax.annotate(
+                    f"HA:\n{format_number(highalch)}",
+                    xy=(dates[-1], item_values.get("highalch")),
+                    xytext=(4, 2),
+                    textcoords="offset points",
+                    horizontalalignment="left",
+                    verticalalignment="bottom",
+                    fontsize=7,
+                    color=alch_color,
+                )
+
+        # plot approx high alch profit, after subtracting approx nature rune cost
+        ymin, ymax = ax.get_ylim()
+        ax.set_ylim(ymin, ymax)
+        if highalch is not None:
+            df_nature = read_prices_data(
+                item_id=561,  # nature rune
+                timestep=timestep,
+                time_start=df["time"].min(),
+                time_stop=df["time"].max(),
+            )
+            if not df_nature.empty:
+                approx_nature_cost = (
+                    df_nature["lowPriceVolume"] * df_nature["avgLowPrice"]
+                    + df_nature["highPriceVolume"] * df_nature["avgHighPrice"]
+                ) / (df_nature["lowPriceVolume"] + df_nature["highPriceVolume"])
+                approx_nature_cost = approx_nature_cost.round()
+                ax.plot(
+                    df_nature["time"].apply(lambda ts: datetime.utcfromtimestamp(ts)),
+                    highalch - approx_nature_cost,
+                    linestyle="solid",
+                    linewidth=1,
+                    color=alch_color,
+                    zorder=7,
+                )
+                ax.annotate(
+                    f"HA\nProfit",
+                    xy=(dates[0], highalch - approx_nature_cost.iloc[0]),
+                    xytext=(-3, 0),
+                    textcoords="offset points",
+                    horizontalalignment="right",
+                    verticalalignment="center",
+                    fontsize=7,
+                    color=alch_color,
+                )
 
     # plot item volume
     ax = axs[1]
