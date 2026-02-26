@@ -17,7 +17,7 @@ The wizard will:
 - Define where to store large datasets (default: ~/ge_seer_data)
 - Save settings to ~/.ge_seer/config.json
 
-## Querying Price Data
+## Building a Price Dataset
 
 Grand Exchange price data is queried from the OSRS Wiki using their [API](https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices). Different methods are provided for calling the API to query data and either return the data or save it to disk. Data is automatically saved as parquet files and read from the user-specified directory during setup.
 
@@ -44,6 +44,19 @@ df = query_prices_instance(
     query_time="2025-11-01 01:20:00 UTC", timestep="5m", store=True
 )
 ```
+
+### Query a single item time series
+
+Query recent price data for one item across many time instances (up to the latest 365 samples at the selected timestep). Returns a `pandas.DataFrame` and optionally saves only new timestamps to disk. Example:
+
+```python
+from ge_seer.data.query import query_prices_timeseries
+
+df = query_prices_timeseries(item_id=4151, timestep="24h", store=False)
+```
+
+Use this method for targeted, recent item histories. If you need many items across
+many timestamps, prefer `query_prices_range`.
 
 ### Batch query a time range
 
@@ -73,7 +86,7 @@ python scripts/query_prices.py --start 1761004800 --stop 1761609600 --timestep 2
 
 ## Reading Saved Price Data
 
-Load previously queried price data from disk. Currently, only supports reading data for a single item. Example:
+Load previously queried price data from disk. Currently, only supports reading data for a single item. The reader merges data from both `instance` and `timeseries` storage layouts (when available), and de-duplicates overlapping timestamps. Example:
 
 ```python
 from ge_seer.data import read_prices_data

@@ -231,6 +231,106 @@ def query_prices_instance(query_time, timestep="24h", store=True):
     ]
 
 
+@rate_limit(min_interval=1.0)
+def query_prices_timeseries(item_id, timestep="24h", store=True):
+    """
+    Fetch time-series price data from the OSRS Wiki GE API for a single item. Returns
+    up to the 365 most recent samples at the requested timestep.
+
+    NOTE: This function is rate-limited to max 1 call per second (enforced by decorator)
+    according to OSRS Wiki guidelines. If called more frequently, it will automatically
+    sleep to enforce the constraint.
+
+    WARNING: This endpoint is intended for querying one item across many recent time
+    samples. If you need many time instances for many items, use query_prices_range,
+    which iterates over time with full-instance snapshots. Avoid wrapping
+    query_prices_timeseries in an item loop for bulk historical collection.
+
+    For more info: https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices
+
+    Arguments:
+    ----------
+    item_id : int or str
+        The item ID for the item to query.
+    timestep : str ["24h"]
+        The time interval for price averaging. Options: "5m", "1h", "6h", "24h"
+    store : bool [True]
+        If True, stores only new (unique by time) samples as a parquet file in the
+        user's data directory, organized by timestep and item ID.
+
+    Returns:
+    --------
+    pd.DataFrame
+        A DataFrame containing the returned time-series price data, with columns:
+            "time" : int, Unix timestamp
+            "avgHighPrice" : int, volume-weighted average of instant-buy transactions
+            "highPriceVolume" : int, volume of instant-buy transactions
+            "avgLowPrice" : int, volume-weighted average of instant-sell transactions
+            "lowPriceVolume" : int, volume of instant-sell transactions
+    """
+    valid_timesteps = {"5m", "1h", "6h", "24h"}
+    if timestep not in valid_timesteps:
+        raise ValueError(
+            f"Invalid timestep: {timestep}. Must be one of {sorted(valid_timesteps)}"
+        )
+
+    # load user configuration for user-agent for API requests
+    config = load_config()
+    headers = {"User-Agent": config["user_agent"]}
+    data_dir = Path(config["data_dir"])
+
+    # query the time-series price data for the specified item and timestep
+    response = requests.get(
+        "https://prices.runescape.wiki/api/v1/osrs/timeseries?timestep=%s&id=%s"
+        % (timestep, item_id),
+        headers=headers,
+    )
+    response.raise_for_status()  # raise an error for bad responses
+
+    # convert the response to a DataFrame, catch empty data
+    df = pd.DataFrame(response.json()["data"])
+    if len(df) == 0:
+        df = _empty_prices_df()
+    else:
+        df = df.rename(columns={"timestamp": "time"})
+        df = df.convert_dtypes()
+
+    # store only unique samples if requested
+    # path: data_dir/prices_raw/timeseries/timestep={timestep}/itemID={item_id}/time={latest_time}.parquet
+    if store and len(df) > 0:
+        partition_dir = (
+            data_dir
+            / "prices_raw"
+            / "timeseries"
+            / f"timestep={timestep}"
+            / f"itemID={item_id}"
+        )
+        partition_dir.mkdir(parents=True, exist_ok=True)
+
+        # gather existing time samples already stored for this timestep/item partition
+        existing_times = set()
+        existing_files = partition_dir.glob("*.parquet")
+        for file in existing_files:
+            table = pq.read_table(file, columns=["time"])
+            if table.num_rows > 0:
+                existing_times.update(table.column("time").to_pylist())
+
+        # filter down to only new time samples
+        df_to_store = df[~df["time"].isin(existing_times)].copy()
+
+        # save only if new unique samples exist; file name uses latest saved sample time
+        if len(df_to_store) > 0:
+            latest_time = int(df_to_store["time"].max())
+            output_file = partition_dir / f"time={latest_time}.parquet"
+            table = pa.Table.from_pandas(df_to_store)
+            pq.write_table(table, output_file)
+
+    # return the queried DataFrame
+    return df[
+        ["time", "avgHighPrice", "highPriceVolume", "avgLowPrice", "lowPriceVolume"]
+    ]
+
+
 def query_prices_range(time_start=None, time_stop=None, timestep="24h"):
     """
     Wrapper for query_prices_instance to batch query and store price data for all valid

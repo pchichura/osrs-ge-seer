@@ -479,6 +479,6 @@ def plot_trade_history(
 
     # save figure if filename provided
     if filename is not None:
-        fig.savefig(filename, dpi=150, bbox_inches="tight")
+        fig.savefig(filename, dpi=300, bbox_inches="tight")
 
     return fig, axs
