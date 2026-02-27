@@ -1,9 +1,13 @@
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
-from ..data import read_prices_data, get_item_map, get_static_values
+from ..data import (
+    read_prices_data,
+    get_item_map,
+    get_static_values,
+    add_derived_price_columns,
+)
 
 
 def format_number(n: int) -> str:
@@ -102,6 +106,7 @@ def plot_trade_history(
             raise ValueError(
                 f"No data found for item {item_id} with timestep {timestep}"
             )
+    df = add_derived_price_columns(df)
 
     # set up plot
     fig, axs = plt.subplots(
@@ -122,22 +127,11 @@ def plot_trade_history(
     all_color = "black"
     alch_color = "goldenrod"
 
-    # calculate some derived quantities
-    total_volume = df["highPriceVolume"] + df["lowPriceVolume"]
-    low_value = df["lowPriceVolume"] * df["avgLowPrice"].to_numpy(
-        na_value=np.nan, dtype=float
-    )
-    high_value = df["highPriceVolume"] * df["avgHighPrice"].to_numpy(
-        na_value=np.nan, dtype=float
-    )
-    total_value = np.nansum([high_value, low_value], axis=0)
-    all_average_price = (total_value / total_volume).round()
-
     # plot price spreads
     ax = axs[0]
     ax.plot(
         dates,
-        all_average_price,
+        df["average_price"],
         marker=marker,
         linestyle="solid",
         linewidth=1.5,
@@ -343,7 +337,7 @@ def plot_trade_history(
     )
     ax.plot(
         dates,
-        total_volume,
+        df["total_volume"],
         marker=marker,
         linestyle="solid",
         linewidth=1.5,
@@ -351,14 +345,17 @@ def plot_trade_history(
     )
 
     # use log scale for better visualizing large volume swings
-    if total_volume.max() / df[["lowPriceVolume", "highPriceVolume"]].min().min() >= 10:
+    if (
+        df["total_volume"].max() / df[["lowPriceVolume", "highPriceVolume"]].min().min()
+        >= 10
+    ):
         ax.set_yscale("log")
 
     # plot total value exchanged
     ax = axs[2]
     ax.plot(
         dates,
-        total_value,
+        df["total_value"],
         marker=marker,
         linestyle="solid",
         zorder=9,
@@ -367,7 +364,7 @@ def plot_trade_history(
     )
     ax.plot(
         dates,
-        high_value,
+        df["high_value"],
         marker=marker,
         linestyle=linestyle,
         zorder=8,
@@ -376,7 +373,7 @@ def plot_trade_history(
     )
     ax.plot(
         dates,
-        low_value,
+        df["low_value"],
         marker=marker,
         linestyle=linestyle,
         zorder=8,
@@ -385,7 +382,7 @@ def plot_trade_history(
     )
 
     # use log scale for better visualizing large swings in total value
-    if total_value.max() / total_value.min() >= 10:
+    if df["total_value"].max() / df["total_value"].min() >= 10:
         ax.set_yscale("log")
 
     # legend at top of figure, based on axs[0] labels

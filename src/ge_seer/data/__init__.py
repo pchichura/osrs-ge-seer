@@ -6,6 +6,7 @@ from .query import (
     query_prices_range,
 )
 from .file_io import read_prices_data
+from .calculations import add_derived_price_columns
 
 __all__ = [
     "get_item_map",
@@ -14,4 +15,5 @@ __all__ = [
     "query_prices_timeseries",
     "query_prices_range",
     "read_prices_data",
+    "add_derived_price_columns",
 ]
