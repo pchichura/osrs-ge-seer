@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from .time_utils import timestamp_to_datetime
 
 
 def add_derived_price_columns(df, inplace=False):
@@ -48,5 +49,39 @@ def add_derived_price_columns(df, inplace=False):
     prices_df["average_price"] = (
         prices_df["total_value"] / prices_df["total_volume"]
     ).round()
+
+    return prices_df
+
+
+def set_datetime_index(df, inplace=False, sort_index=True):
+    """
+    Convert the "time" column (Unix timestamp) into a UTC datetime index "Date".
+
+    Arguments:
+    ----------
+    df : pd.DataFrame
+        DataFrame containing a "time" column in Unix seconds.
+    inplace : bool [False]
+        If True, mutate and return the input DataFrame. If False, return a copy.
+    sort_index : bool [True]
+        If True, sort the DataFrame by the resulting datetime index.
+
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with a UTC datetime index named ``Date``.
+    """
+    # validate required column
+    if "time" not in df.columns:
+        raise ValueError("DataFrame must contain column: time")
+
+    # create a copy of the DataFrame if not modifying in place
+    prices_df = df if inplace else df.copy()
+
+    # convert the "time" column to UTC datetime and set as index
+    prices_df["Date"] = timestamp_to_datetime(prices_df["time"], as_string=False)
+    prices_df.set_index("Date", inplace=True)
+    if sort_index:
+        prices_df.sort_index(inplace=True)
 
     return prices_df
