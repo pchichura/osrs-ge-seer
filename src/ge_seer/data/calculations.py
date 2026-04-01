@@ -107,7 +107,7 @@ def add_alchemy_columns(
     Arguments:
     ----------
     df : pd.DataFrame
-        DataFrame containing at least time.
+        DataFrame containing either a Unix "time" column or a DatetimeIndex.
     item_id : int or str
         Item ID used to fetch static low/high alchemy values.
     timestep : str
@@ -121,13 +121,21 @@ def add_alchemy_columns(
         DataFrame with alchemy columns appended.
     """
 
-    # validate required column
-    required_cols = {"time"}
-    if not required_cols.issubset(df.columns):
-        raise ValueError(f"DataFrame must contain columns: {required_cols}")
+    # validate required temporal reference: either time column or datetime index
+    has_time_col = "time" in df.columns
+    has_datetime_index = isinstance(df.index, pd.DatetimeIndex)
+    if not has_time_col and not has_datetime_index:
+        raise ValueError(
+            "DataFrame must contain a 'time' column or use a DatetimeIndex"
+        )
 
     # create a copy of the DataFrame if not modifying in place
     prices_df = df if inplace else df.copy()
+
+    # normalize temporal reference: build Unix "time" from DatetimeIndex when absent
+    if not has_time_col and has_datetime_index:
+        prices_df["time"] = (prices_df.index.view("int64") // 10**9).astype("int64")
+        has_time_col = True
 
     # static alchemy values are constant for a given item
     static_values = get_static_values()
@@ -140,11 +148,13 @@ def add_alchemy_columns(
     # approximate nature rune cost from weighted average traded price
     prices_df["nature_rune_price"] = np.nan
     if not prices_df.empty:
+        time_start = prices_df["time"].min()
+        time_stop = prices_df["time"].max()
         df_nature = read_prices_data(
-            item_id=561, # nature rune item ID
+            item_id=561,  # nature rune item ID
             timestep=timestep,
-            time_start=prices_df["time"].min(),
-            time_stop=prices_df["time"].max(),
+            time_start=time_start,
+            time_stop=time_stop,
         )
         if not df_nature.empty:
             nature_total_volume = (
@@ -156,7 +166,7 @@ def add_alchemy_columns(
             ) / nature_total_volume
             nature_rune_price = nature_rune_price.round()
 
-            # merge the nature rune price into the main df
+            # Merge nature rune prices by Unix timestamp.
             prices_df = prices_df.merge(
                 df_nature[["time"]].assign(nature_rune_price=nature_rune_price),
                 on="time",
@@ -170,9 +180,7 @@ def add_alchemy_columns(
 
     # compute alchemy profits after nature rune cost
     prices_df["nature_rune_price"] = prices_df["nature_rune_price"]
-    prices_df["lowalch_profit"] = (
-        prices_df["lowalch"] - prices_df["nature_rune_price"]
-    )
+    prices_df["lowalch_profit"] = prices_df["lowalch"] - prices_df["nature_rune_price"]
     prices_df["highalch_profit"] = (
         prices_df["highalch"] - prices_df["nature_rune_price"]
     )
@@ -219,7 +227,11 @@ def rebin_to_ohlcv(
     """
     # validate required columns
     required_cols = {
-        "time", "avgHighPrice", "highPriceVolume", "avgLowPrice", "lowPriceVolume"
+        "time",
+        "avgHighPrice",
+        "highPriceVolume",
+        "avgLowPrice",
+        "lowPriceVolume",
     }
     if not required_cols.issubset(df.columns):
         raise ValueError(f"DataFrame must contain columns: {required_cols}")
@@ -243,7 +255,7 @@ def rebin_to_ohlcv(
     if (trim_partial_start or trim_partial_end) and not prices_df.empty:
         resample_rule = normalize_timestep_rule(output_timestep)
         index_mask = pd.Series(True, index=prices_df.index)
-        
+
         if trim_partial_start:
             first_ts = prices_df.index.min()
             start_boundary = first_ts.ceil(resample_rule)
