@@ -7,6 +7,8 @@ from ..data import (
     get_item_map,
     get_static_values,
     add_derived_price_columns,
+    rebin_to_ohlcv,
+    set_datetime_index,
 )
 
 
@@ -479,3 +481,54 @@ def plot_trade_history(
         fig.savefig(filename, dpi=300, bbox_inches="tight")
 
     return fig, axs
+
+
+def plot_mplfinance(df, input_timestep=None, output_timestep=None, **kwargs):
+    """
+    Wrapper around mplfinance.plot for plotting OHLCV data or rebinned OSRS Wiki GE data
+
+    Arguments:
+    ----------
+    df : pd.DataFrame
+        Input DataFrame, required to be in OHLCV format, or be standard GE data to be
+        rebinned into OHLCV format
+    input_timestep : str [None]
+        When df is not in OHLCV format, the native timestep of the input DataFrame
+    output_timestep : str [None]
+        When df is not in OHLCV format, the desired rebinned timestep, which must be
+        greater than the input timestep
+    **kwargs
+        Any keyword arguments to pass to mplfinance.plot
+    """
+    import mplfinance as mpf
+
+    # check if required columns are present
+    required_cols = {"Open", "High", "Low", "Close", "Volume"}
+    required_cols_lower = {col.lower() for col in required_cols}
+    if required_cols.issubset(df.columns) or required_cols_lower.issubset(df.columns):
+        mpf_df = df.copy()
+
+    # create required columns otherwise
+    else:
+        if input_timestep is None or output_timestep is None:
+            raise ValueError(
+                "timestep arguments required when data is not already in OHLCV format"
+            )
+        mpf_df = rebin_to_ohlcv(
+            df=df,
+            input_timestep=input_timestep,
+            output_timestep=output_timestep,
+            inplace=False,
+        )
+
+    # mplfinance expects a datetime index
+    if not isinstance(mpf_df.index, pd.DatetimeIndex):
+        mpf_df = set_datetime_index(mpf_df, inplace=False, sort_index=True)
+    mpf_df.index.name = "Date"
+
+    # mplfinance expects capitalized OHLCV column names and int/float columns
+    mpf_df.rename(columns={col.lower(): col for col in required_cols}, inplace=True)
+    for col in required_cols:
+        mpf_df[col] = mpf_df[col].astype(int)
+
+    mpf.plot(mpf_df, **kwargs)

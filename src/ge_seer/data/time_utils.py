@@ -78,6 +78,53 @@ def datetime_to_timestamp(time):
     return int(converted.timestamp())
 
 
+def normalize_timestep_rule(timestep):
+    """
+    Normalize timestep strings into pandas-compatible resample rules.
+
+    Arguments:
+    ----------
+    timestep : str
+        Timestep string to normalize: "5m", "1h", "6h", "24h"
+
+    Returns:
+    --------
+    str
+        Normalized pandas resample rule: "5min", "1h", "6h", "24h"
+    """
+    if not isinstance(timestep, str) or timestep.strip() == "":
+        raise ValueError("timestep must be a non-empty string")
+
+    # convert to pandas-compatible format
+    ts = timestep.strip().lower()
+    if ts.endswith("m"):
+        return f"{int(ts[:-1])}min"
+    if ts.endswith("h"):
+        return f"{int(ts[:-1])}h"
+    return ts
+
+
+def timestep_to_timedelta(timestep):
+    """
+    Convert a timestep string to pandas Timedelta for comparisons.
+
+    Arguments:
+    ----------
+    timestep : str
+        Timestep string to convert: "5m", "1h", "6h", "24h"
+    
+    Returns:
+    --------
+    pd.Timedelta
+        Corresponding pandas Timedelta object.
+    """
+    rule = normalize_timestep_rule(timestep)
+    try:
+        return pd.to_timedelta(rule)
+    except ValueError as exc:
+        raise ValueError(f"Unable to parse timestep: {timestep}") from exc
+
+
 def standardize_time_input(time):
     """
     Standardizes time input to a Unix timestamp. Accepts either an integer timestamp

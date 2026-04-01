@@ -8,6 +8,7 @@ authors = [{name = "Paul Chichura", email = "pchichura@gmail.com"}]
 keywords = ["osrs", "grand-exchange"]
 dependencies = [
 	"pandas",
+	"mplfinance",
 	"pyarrow",
 	"requests",
 	"tqdm",
