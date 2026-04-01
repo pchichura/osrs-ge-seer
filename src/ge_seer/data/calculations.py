@@ -4,6 +4,7 @@ from .file_io import read_prices_data
 from .query import get_static_values
 from .time_utils import (
     timestamp_to_datetime,
+    datetime_to_timestamp,
     normalize_timestep_rule,
     timestep_to_timedelta,
 )
@@ -134,7 +135,7 @@ def add_alchemy_columns(
 
     # normalize temporal reference: build Unix "time" from DatetimeIndex when absent
     if not has_time_col and has_datetime_index:
-        prices_df["time"] = (prices_df.index.view("int64") // 10**9).astype("int64")
+        prices_df["time"] = datetime_to_timestamp(prices_df.index)
         has_time_col = True
 
     # static alchemy values are constant for a given item
