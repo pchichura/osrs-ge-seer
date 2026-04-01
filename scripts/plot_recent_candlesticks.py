@@ -112,7 +112,7 @@ def plot_candlesticks(item_id, mav=(3,), output_file=None):
             linewidth=1.7,
             color="goldenrod",
             zorder=1,
-            label="High Alch Profit",
+            label="High Alchemy Profit",
         )
         ax[0].set_ylim(price_ymin, price_ymax)
 
