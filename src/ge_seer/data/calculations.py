@@ -86,7 +86,15 @@ def set_datetime_index(df, inplace=False, sort_index=True):
     return prices_df
 
 
-def rebin_to_ohlcv(df, input_timestep, output_timestep, inplace=False, sort_index=True):
+def rebin_to_ohlcv(
+    df,
+    input_timestep,
+    output_timestep,
+    inplace=False,
+    sort_index=True,
+    trim_partial_start=True,
+    trim_partial_end=True,
+):
     """
     Re-bin GE averaged data into general OHLCV columns with "date" datetime index and
     "open", "high``, "low", "close", "volume" columns over the rebinned timestep.
@@ -103,6 +111,12 @@ def rebin_to_ohlcv(df, input_timestep, output_timestep, inplace=False, sort_inde
         If True, reuse input data where possible. If False, operate on a copy.
     sort_index : bool [True]
         If True, sort by datetime index before rebinning.
+    trim_partial_start : bool [True]
+        If True, drop rows in the first partial output_timestep window by trimming the
+        start timestamp up to the next output_timestep boundary.
+    trim_partial_end : bool [True]
+        If True, drop rows in the last partial output_timestep window by trimming the
+        end timestamp down to the previous output_timestep boundary.
 
     Returns:
     --------
@@ -130,6 +144,23 @@ def rebin_to_ohlcv(df, input_timestep, output_timestep, inplace=False, sort_inde
     # compute lowest and highest prices for OHLCV aggregation
     prices_df["low_price"] = prices_df[["avgLowPrice", "avgHighPrice"]].min(axis=1)
     prices_df["high_price"] = prices_df[["avgLowPrice", "avgHighPrice"]].max(axis=1)
+
+    # optionally trim partial boundary windows before resampling
+    if (trim_partial_start or trim_partial_end) and not prices_df.empty:
+        resample_rule = normalize_timestep_rule(output_timestep)
+        index_mask = pd.Series(True, index=prices_df.index)
+        
+        if trim_partial_start:
+            first_ts = prices_df.index.min()
+            start_boundary = first_ts.ceil(resample_rule)
+            index_mask &= prices_df.index >= start_boundary
+
+        if trim_partial_end:
+            last_ts = prices_df.index.max()
+            end_boundary = last_ts.floor(resample_rule)
+            index_mask &= prices_df.index < end_boundary
+
+        prices_df = prices_df[index_mask]
 
     # rebin to OHLCV using pandas resample
     resample_rule = normalize_timestep_rule(output_timestep)

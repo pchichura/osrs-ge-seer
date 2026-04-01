@@ -497,6 +497,12 @@ def plot_mplfinance(df, input_timestep=None, output_timestep=None, **kwargs):
     output_timestep : str [None]
         When df is not in OHLCV format, the desired rebinned timestep, which must be
         greater than the input timestep
+    trim_partial_start : bool [True]
+        When df is not in OHLCV format, whether to drop rows in the first partial
+        output_timestep window when rebinning.
+    trim_partial_end : bool [True]
+        When df is not in OHLCV format, whether to drop rows in the last partial
+        output_timestep window when rebinning.
     **kwargs
         Any keyword arguments to pass to mplfinance.plot
     """
@@ -519,6 +525,8 @@ def plot_mplfinance(df, input_timestep=None, output_timestep=None, **kwargs):
             input_timestep=input_timestep,
             output_timestep=output_timestep,
             inplace=False,
+            trim_partial_start=trim_partial_start,
+            trim_partial_end=trim_partial_end,
         )
 
     # mplfinance expects a datetime index
