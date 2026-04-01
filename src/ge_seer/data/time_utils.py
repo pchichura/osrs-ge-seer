@@ -58,8 +58,7 @@ def datetime_to_timestamp(time):
     """
     # vectorized conversion for pandas/list-like objects
     if isinstance(time, (pd.Series, pd.Index, list, tuple)):
-        converted = pd.to_datetime(time, utc=True)
-        return converted.astype("int64") // 10**9
+        return (time - pd.Timestamp("1970-01-01", tz='utc')) // pd.Timedelta("1s")
 
     # scalar conversion
     if isinstance(time, str):
