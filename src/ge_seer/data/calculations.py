@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from .file_io import read_prices_data
+from .query import get_static_values
 from .time_utils import (
     timestamp_to_datetime,
     normalize_timestep_rule,
@@ -82,6 +84,98 @@ def set_datetime_index(df, inplace=False, sort_index=True):
     prices_df.set_index("date", inplace=True)
     if sort_index:
         prices_df.sort_index(inplace=True)
+
+    return prices_df
+
+
+def add_alchemy_columns(
+    df,
+    item_id,
+    timestep,
+    inplace=False,
+):
+    """
+    Add columns related to alchemy spells to an item prices DataFrame.
+
+    Added columns:
+    - nature_rune_price: approximate cost of a nature rune on the GE
+    - lowalch: static low alchemy value for the item
+    - highalch: static high alchemy value for the item
+    - lowalch_profit: approximate profit from low alching (after nature rune cost)
+    - highalch_profit: approximate profit from high alching (after nature rune cost)
+
+    Arguments:
+    ----------
+    df : pd.DataFrame
+        DataFrame containing at least time.
+    item_id : int or str
+        Item ID used to fetch static low/high alchemy values.
+    timestep : str
+        Saved timestep of df. Used to fetch matching nature rune prices.
+    inplace : bool [False]
+        If True, mutate and return the input DataFrame. If False, return a copy.
+
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with alchemy columns appended.
+    """
+
+    # validate required column
+    required_cols = {"time"}
+    if not required_cols.issubset(df.columns):
+        raise ValueError(f"DataFrame must contain columns: {required_cols}")
+
+    # create a copy of the DataFrame if not modifying in place
+    prices_df = df if inplace else df.copy()
+
+    # static alchemy values are constant for a given item
+    static_values = get_static_values()
+    item_values = static_values.get(str(item_id), {})
+    lowalch = item_values.get("lowalch")
+    highalch = item_values.get("highalch")
+    prices_df["lowalch"] = lowalch
+    prices_df["highalch"] = highalch
+
+    # approximate nature rune cost from weighted average traded price
+    prices_df["nature_rune_price"] = np.nan
+    if not prices_df.empty:
+        df_nature = read_prices_data(
+            item_id=561, # nature rune item ID
+            timestep=timestep,
+            time_start=prices_df["time"].min(),
+            time_stop=prices_df["time"].max(),
+        )
+        if not df_nature.empty:
+            nature_total_volume = (
+                df_nature["lowPriceVolume"] + df_nature["highPriceVolume"]
+            )
+            nature_rune_price = (
+                df_nature["lowPriceVolume"] * df_nature["avgLowPrice"]
+                + df_nature["highPriceVolume"] * df_nature["avgHighPrice"]
+            ) / nature_total_volume
+            nature_rune_price = nature_rune_price.round()
+
+            # merge the nature rune price into the main df
+            prices_df = prices_df.merge(
+                df_nature[["time"]].assign(nature_rune_price=nature_rune_price),
+                on="time",
+                how="left",
+                suffixes=("", "_new"),
+            )
+            prices_df["nature_rune_price"] = prices_df[
+                "nature_rune_price_new"
+            ].combine_first(prices_df["nature_rune_price"])
+            prices_df.drop(columns=["nature_rune_price_new"], inplace=True)
+
+    # compute alchemy profits after nature rune cost
+    prices_df["nature_rune_price"] = prices_df["nature_rune_price"]
+    prices_df["lowalch_profit"] = (
+        prices_df["lowalch"] - prices_df["nature_rune_price"]
+    )
+    prices_df["highalch_profit"] = (
+        prices_df["highalch"] - prices_df["nature_rune_price"]
+    )
 
     return prices_df
 

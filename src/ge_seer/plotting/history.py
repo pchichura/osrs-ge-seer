@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from ..data import (
     read_prices_data,
     get_item_map,
-    get_static_values,
     add_derived_price_columns,
+    add_alchemy_columns,
     rebin_to_ohlcv,
     set_datetime_index,
 )
@@ -190,14 +190,13 @@ def plot_trade_history(
 
     # get alchemy values for plotting
     if plot_alchemy:
-        static_values = get_static_values()
-        item_values = static_values.get(str(item_id), {})
-        lowalch = item_values.get("lowalch")
-        highalch = item_values.get("highalch")
+        df = add_alchemy_columns(df, item_id=item_id, timestep=timestep)
+        lowalch = list(df["lowalch"])[0]
+        highalch = list(df["highalch"])[0]
 
         # plot low alch values
         ymin, ymax = ax.get_ylim()
-        if lowalch is not None:
+        if not pd.isna(lowalch):
             if lowalch > ymax:
                 ax.scatter(dates[0], ymax, marker="^", color=alch_color)
                 ax.annotate(
@@ -224,14 +223,14 @@ def plot_trade_history(
                 )
             else:
                 ax.axhline(
-                    item_values.get("lowalch"),
+                    lowalch,
                     color=alch_color,
                     linestyle="dashed",
                     linewidth=0.5,
                 )
                 ax.annotate(
                     f"LA:\n{format_number(lowalch)}",
-                    xy=(dates[0], item_values.get("lowalch")),
+                    xy=(dates[0], lowalch),
                     xytext=(-4, -4),
                     textcoords="offset points",
                     horizontalalignment="right",
@@ -241,7 +240,7 @@ def plot_trade_history(
                 )
 
         # plot high alch values
-        if highalch is not None:
+        if not pd.isna(highalch):
             if highalch > ymax:
                 ax.scatter(dates[-1], ymax, marker="^", color=alch_color)
                 ax.annotate(
@@ -268,14 +267,14 @@ def plot_trade_history(
                 )
             else:
                 ax.axhline(
-                    item_values.get("highalch"),
+                    highalch,
                     color=alch_color,
                     linestyle="dashed",
                     linewidth=0.5,
                 )
                 ax.annotate(
                     f"HA:\n{format_number(highalch)}",
-                    xy=(dates[-1], item_values.get("highalch")),
+                    xy=(dates[-1], highalch),
                     xytext=(4, 2),
                     textcoords="offset points",
                     horizontalalignment="left",
@@ -287,37 +286,25 @@ def plot_trade_history(
         # plot approx high alch profit, after subtracting approx nature rune cost
         ymin, ymax = ax.get_ylim()
         ax.set_ylim(ymin, ymax)
-        if highalch is not None:
-            df_nature = read_prices_data(
-                item_id=561,  # nature rune
-                timestep=timestep,
-                time_start=df["time"].min(),
-                time_stop=df["time"].max(),
+        if not pd.isna(highalch):
+            ax.plot(
+                df["time"].apply(lambda ts: datetime.utcfromtimestamp(ts)),
+                df["highalch_profit"],
+                linestyle="solid",
+                linewidth=1,
+                color=alch_color,
+                zorder=7,
             )
-            if not df_nature.empty:
-                approx_nature_cost = (
-                    df_nature["lowPriceVolume"] * df_nature["avgLowPrice"]
-                    + df_nature["highPriceVolume"] * df_nature["avgHighPrice"]
-                ) / (df_nature["lowPriceVolume"] + df_nature["highPriceVolume"])
-                approx_nature_cost = approx_nature_cost.round()
-                ax.plot(
-                    df_nature["time"].apply(lambda ts: datetime.utcfromtimestamp(ts)),
-                    highalch - approx_nature_cost,
-                    linestyle="solid",
-                    linewidth=1,
-                    color=alch_color,
-                    zorder=7,
-                )
-                ax.annotate(
-                    f"HA\nProfit",
-                    xy=(dates[0], highalch - approx_nature_cost.iloc[0]),
-                    xytext=(-3, 0),
-                    textcoords="offset points",
-                    horizontalalignment="right",
-                    verticalalignment="center",
-                    fontsize=7,
-                    color=alch_color,
-                )
+            ax.annotate(
+                f"HA\nProfit",
+                xy=(dates[0], list(df["highalch_profit"])[0]),
+                xytext=(-3, 0),
+                textcoords="offset points",
+                horizontalalignment="right",
+                verticalalignment="center",
+                fontsize=7,
+                color=alch_color,
+            )
 
     # plot item volume
     ax = axs[1]

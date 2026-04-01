@@ -8,6 +8,7 @@ from .query import (
 from .file_io import read_prices_data
 from .calculations import (
     add_derived_price_columns,
+    add_alchemy_columns,
     set_datetime_index,
     rebin_to_ohlcv,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "query_prices_range",
     "read_prices_data",
     "add_derived_price_columns",
+    "add_alchemy_columns",
     "set_datetime_index",
     "rebin_to_ohlcv",
 ]

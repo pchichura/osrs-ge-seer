@@ -3,9 +3,9 @@
 CLI tool to plot OSRS Grand Exchange trade history for an item.
 
 Usage:
-    python scripts/plot_trade_history.py --item-id 1925 --timestep 24h
-    python scripts/plot_trade_history.py --item-id 1925 --timestep 1h --time-start "2025-12-20 00:00:00 UTC"
-    python scripts/plot_trade_history.py --item-id 1925 --output prices.png
+    python scripts/plot_trade_history.py --itemid 1925 --timestep 24h
+    python scripts/plot_trade_history.py --itemid 1925 --timestep 1h --time-start "2025-12-20 00:00:00 UTC"
+    python scripts/plot_trade_history.py --itemid 1925 --output prices.png
 """
 
 import argparse
